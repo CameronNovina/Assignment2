@@ -10,42 +10,93 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <unistd.h>
-#include <assert.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <string.h>
 
 int filecopy(char *inputfile, char *outputfile);
 
-
 int main (int argc, char *argv[]){
-    //assert(argc == 2);
-    if(argc != 2){
+        
+    //Check to make sure the user has provided enough arguments.
+    if(argc != 3){
         fprintf(stderr,"%s %s %d\n","Incorrect number of arguments.", "Expected 2 arguments; Received ", (argc-1));
         printf("%s","usage: filecopy 'inputfile' 'outputfile'\n");
         return -1;
     }
     
+    //If enough arguments have been provided call the function and pass it the arguments.
     else{
         filecopy(argv[1], argv[2]);
     }
     return(0);
 }
 
-
+//Primary function of the program
 int filecopy(char *inputfile, char *outputfile){    
-    FILE *fp;
-    char buffer[100];
-    int fd[2], src, bytes, dst;
+    char buffer[100];           //Buffer between the read location and write location.
+    int fd[2], src, dst;        //Pipe type(read/ write), file descriptors of the source and destination files.
+    pid_t pid;                  //Process Id after the fork command. Will differ between the child and the parent.
 
-    //pipe(fd);
+    //Creation of the pipe.
+    pipe(fd);
+    
+    //Opening the source and destination files with required permissions.
+    src = open(inputfile, 0);
+    dst = open(outputfile, O_RDWR|O_CREAT|O_APPEND, 0666);
 
-    fp = fopen(inputfile, "r");
-    if(fp = NULL){
-        perror("file");
-        return(-1);
+    //Making sure that the file opened correctly.
+    if(src == -1 || dst == -1){
+        fprintf(stderr, "%s\n", "File failed to open.");
+        exit(1);
     }
-    fclose(fp);
+    
+    //Creation of the child process through fork. Child is assigned a pid of 0.
+    //Child receives copy of entire address space of parent.
+    pid = fork();
+
+    //Now both processes will run independent of one another we need to separate the code
+    //each process is allowed to run. If the process is the child (pid=0) run this code. 
+    if(pid == 0){
+        
+        //The child will be writing the copied data to a new file (or appending to an existing file).
+        //We are receiving from the parent so we close the writing end of the pipe.
+        close(fd[1]);
+        
+        //While we can still read from the pipe (fd[0] is treated like a file) with the buffer that
+        //we provided and data is still within the buffer, write that data buffer to the destination
+        //file.
+        while(read(fd[0], buffer, sizeof(buffer)) > 0){
+            write(dst, buffer, strlen(buffer)+1);
+        }
+        
+        //Close the reading end of the pipe on the child and closing the file once we are finished.
+        close(fd[0]);
+        close(dst);
+    }
+
+    //We don't know the pid of the parent (we could find it if we wanted to) so else will suffice.
+    else{
+
+        //The parent will be reading the code from the source file.
+        //We are transmitting to the child so we close the reading end of the pipe.
+        close(fd[0]);    
+        
+        //While we can still read from the source file with the buffer that we provided and data
+        //is still within the buffer, write that data to the pipe (fd[1] is treated like a file).
+        //Memset clears the buffer once data is finished transmitting.
+        while(read(src, buffer, sizeof(buffer)) > 0){
+            write(fd[1], buffer, sizeof(buffer));
+            memset(buffer, 0, 100);
+        }
+
+        //Close the writing end of the pipe on the parent and closing the file once we are finished.
+        //Wait for the child process to complete before resuming.
+        close(fd[1]);
+        close(src);
+        wait(NULL);
+    }
 
     return(0);
-
-
 }
