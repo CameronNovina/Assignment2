@@ -10,7 +10,42 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <unistd.h>
+#include <assert.h>
+
+int filecopy(char *inputfile, char *outputfile);
+
 
 int main (int argc, char *argv[]){
- 
+    //assert(argc == 2);
+    if(argc != 2){
+        fprintf(stderr,"%s %s %d\n","Incorrect number of arguments.", "Expected 2 arguments; Received ", (argc-1));
+        printf("%s","usage: filecopy 'inputfile' 'outputfile'\n");
+        return -1;
+    }
+    
+    else{
+        filecopy(argv[1], argv[2]);
+    }
+    return(0);
+}
+
+
+int filecopy(char *inputfile, char *outputfile){    
+    FILE *fp;
+    char buffer[100];
+    int fd[2], src, bytes, dst;
+
+    //pipe(fd);
+
+    fp = fopen(inputfile, "r");
+    if(fp = NULL){
+        perror("file");
+        return(-1);
+    }
+    fclose(fp);
+
+    return(0);
+
+
 }
