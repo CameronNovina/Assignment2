@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
+#include <unistd.h>
 
 int filecopy(char *inputfile, char *outputfile);
 
@@ -40,7 +41,9 @@ int filecopy(char *inputfile, char *outputfile){
     pid_t pid;                  //Process Id after the fork command. Will differ between the child and the parent.
 
     //Creation of the pipe.
-    pipe(fd);
+    if(pipe(fd) == -1){
+        perror("Pipe creation failed.");   
+    }
     
     //Opening the source and destination files with required permissions.
     src = open(inputfile, 0);
@@ -48,13 +51,18 @@ int filecopy(char *inputfile, char *outputfile){
 
     //Making sure that the file opened correctly.
     if(src == -1 || dst == -1){
-        fprintf(stderr, "%s\n", "File failed to open.");
+        perror("One or more files failed to open.");
         exit(1);
     }
     
     //Creation of the child process through fork. Child is assigned a pid of 0.
     //Child receives copy of entire address space of parent.
     pid = fork();
+    
+    if(pid == -1){
+        perror("Process creation failed");
+        exit(1);
+    }
 
     //Now both processes will run independent of one another we need to separate the code
     //each process is allowed to run. If the process is the child (pid=0) run this code. 
@@ -63,12 +71,15 @@ int filecopy(char *inputfile, char *outputfile){
         //The child will be writing the copied data to a new file (or appending to an existing file).
         //We are receiving from the parent so we close the writing end of the pipe.
         close(fd[1]);
+
         
         //While we can still read from the pipe (fd[0] is treated like a file) with the buffer that
         //we provided and data is still within the buffer, write that data buffer to the destination
         //file.
         while(read(fd[0], buffer, sizeof(buffer)) > 0){
-            write(dst, buffer, strlen(buffer)+1);
+            if(write(dst, buffer, strlen(buffer)+1) == -1){
+                perror("Write failed");
+            }
         }
         
         //Close the reading end of the pipe on the child and closing the file once we are finished.
@@ -87,7 +98,9 @@ int filecopy(char *inputfile, char *outputfile){
         //is still within the buffer, write that data to the pipe (fd[1] is treated like a file).
         //Memset clears the buffer once data is finished transmitting.
         while(read(src, buffer, sizeof(buffer)) > 0){
-            write(fd[1], buffer, sizeof(buffer));
+            if(write(fd[1], buffer, sizeof(buffer)) == -1){      
+                perror("Write failed");
+            }
             memset(buffer, 0, 100);
         }
 
